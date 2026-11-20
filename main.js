@@ -1,3 +1,5 @@
+console.log('BOOT_VERSION_2026_V5');
+
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
