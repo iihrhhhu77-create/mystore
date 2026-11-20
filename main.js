@@ -12,9 +12,16 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
+const publicDir = fs.existsSync(path.join(__dirname, 'public'))
+  ? path.join(__dirname, 'public')
+  : __dirname;
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(publicDir));
+if (publicDir !== __dirname) {
+  app.use(express.static(__dirname));
+}
 app.use('/uploads', express.static(uploadDir));
 
 const storage = multer.diskStorage({
@@ -75,13 +82,35 @@ db.serialize(function () {
   )`);
 });
 
+function resolvePageFile(fileName) {
+  const inPublic = path.join(__dirname, 'public', fileName);
+  if (fs.existsSync(inPublic)) {
+    return inPublic;
+  }
+  const inRoot = path.join(__dirname, fileName);
+  if (fs.existsSync(inRoot)) {
+    return inRoot;
+  }
+  return null;
+}
+
 // الصفحات الرئيسية
 app.get('/', function (req, res) {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  const indexFile = resolvePageFile('index.html');
+  if (indexFile) {
+    res.sendFile(indexFile);
+  } else {
+    res.status(404).send('index.html not found');
+  }
 });
 
 app.get('/admin.html', function (req, res) {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+  const adminFile = resolvePageFile('admin.html');
+  if (adminFile) {
+    res.sendFile(adminFile);
+  } else {
+    res.status(404).send('admin.html not found');
+  }
 });
 
 // المتاجر
