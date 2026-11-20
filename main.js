@@ -94,7 +94,12 @@ db.serialize(function () {
 app.get('/', function (req, res) {
   const indexPath = findStaticFile('index.html');
   if (indexPath) {
-    return res.sendFile(indexPath);
+    try {
+      const html = fs.readFileSync(indexPath, 'utf8');
+      return res.status(200).type('html').send(html);
+    } catch (err) {
+      return res.status(500).send('Error reading index.html: ' + err.message);
+    }
   }
 
   const rootFiles = fs.existsSync(process.cwd()) ? fs.readdirSync(process.cwd()) : [];
@@ -117,7 +122,12 @@ app.get('/', function (req, res) {
 app.get('/admin.html', function (req, res) {
   const adminPath = findStaticFile('admin.html');
   if (adminPath) {
-    return res.sendFile(adminPath);
+    try {
+      const html = fs.readFileSync(adminPath, 'utf8');
+      return res.status(200).type('html').send(html);
+    } catch (err) {
+      return res.status(500).send('Error reading admin.html: ' + err.message);
+    }
   }
   return res.status(404).send('admin.html not found');
 });
