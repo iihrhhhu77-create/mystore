@@ -1,4 +1,4 @@
-console.log('BOOT_VERSION_2026_V9');
+console.log('BOOT_VERSION_2026_V10');
 
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
@@ -9,8 +9,8 @@ const multer = require('multer');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 const baseDir = __dirname;
 const publicDir = path.join(baseDir, 'public');
@@ -33,7 +33,7 @@ const storage = multer.diskStorage({
   },
   filename: function (req, file, cb) {
     const randomPart = Math.floor(Math.random() * 1000000000);
-    const ext = path.extname(file.originalname || '');
+    const ext = path.extname(file.originalname || '') || '.jpg';
     cb(null, Date.now() + '-' + randomPart + ext);
   }
 });
@@ -53,7 +53,6 @@ db.serialize(function () {
   db.run(
     'CREATE TABLE IF NOT EXISTS stores (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, slug TEXT UNIQUE NOT NULL, description TEXT, min_order INTEGER DEFAULT 0, image TEXT)'
   );
-
   db.run('ALTER TABLE stores ADD COLUMN image TEXT', function () {});
 
   db.run(
@@ -61,8 +60,9 @@ db.serialize(function () {
   );
 
   db.run(
-    'CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_name TEXT NOT NULL, phone TEXT NOT NULL, wilaya TEXT, items_json TEXT NOT NULL, total REAL NOT NULL, status TEXT DEFAULT "pending", created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'
+    'CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_name TEXT NOT NULL, phone TEXT NOT NULL, location TEXT, wilaya TEXT, items_json TEXT NOT NULL, total REAL NOT NULL, status TEXT DEFAULT "pending", created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'
   );
+  db.run('ALTER TABLE orders ADD COLUMN location TEXT', function () {});
 
   db.run(
     'CREATE TABLE IF NOT EXISTS custom_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_name TEXT NOT NULL, phone TEXT NOT NULL, notes TEXT, image TEXT, status TEXT DEFAULT "new", created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'
@@ -126,12 +126,7 @@ app.get('/', function (req, res) {
       return res.status(500).send('Read error at ' + foundPath + ': ' + err.message);
     }
   }
-
-  const allFiles = listAllFiles(baseDir, 0);
-  return res
-    .status(404)
-    .type('text')
-    .send('index.html not found anywhere under ' + baseDir + '\nFiles:\n' + allFiles.join('\n'));
+  return res.status(404).type('text').send('index.html not found');
 });
 
 app.get('/admin.html', function (req, res) {
@@ -151,21 +146,20 @@ app.get('/api/health', function (req, res) {
   res.json({ ok: true, baseDir: baseDir, files: listAllFiles(baseDir, 0) });
 });
 
+// ================= المتاجر =================
 app.get('/api/stores', function (req, res) {
   db.all('SELECT * FROM stores ORDER BY id DESC', [], function (err, rows) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows);
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows || []);
   });
 });
 
 app.post('/api/stores', upload.single('image'), function (req, res) {
   const body = req.body || {};
-  const name = body.name || body.store_name || body.title || '';
+  const name = (body.name || body.store_name || body.title || '').trim();
   const description = body.description || '';
   const minOrder = Number(body.min_order) || 0;
-  const rawSlug = body.slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const rawSlug = (body.slug || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const slug = (rawSlug || 'store') + '-' + Date.now();
   const imagePath = req.file ? '/uploads/' + req.file.filename : body.image || '';
 
@@ -177,9 +171,7 @@ app.post('/api/stores', upload.single('image'), function (req, res) {
     'INSERT INTO stores (name, slug, description, min_order, image) VALUES (?, ?, ?, ?, ?)',
     [name, slug, description, minOrder, imagePath],
     function (err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
+      if (err) return res.status(500).json({ error: err.message });
       res.status(201).json({
         id: this.lastID,
         name: name,
@@ -192,6 +184,42 @@ app.post('/api/stores', upload.single('image'), function (req, res) {
   );
 });
 
+app.put('/api/stores/:id', upload.single('image'), function (req, res) {
+  const id = Number(req.params.id);
+  const body = req.body || {};
+
+  db.get('SELECT * FROM stores WHERE id = ?', [id], function (err, store) {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!store) return res.status(404).json({ error: 'المتجر غير موجود' });
+
+    const name = (body.name || store.name).trim();
+    const description = body.description !== undefined ? body.description : store.description;
+    const minOrder = body.min_order !== undefined ? Number(body.min_order) || 0 : store.min_order;
+    const imagePath = req.file ? '/uploads/' + req.file.filename : (body.image !== undefined ? body.image : store.image);
+
+    db.run(
+      'UPDATE stores SET name = ?, description = ?, min_order = ?, image = ? WHERE id = ?',
+      [name, description, minOrder, imagePath, id],
+      function (updateErr) {
+        if (updateErr) return res.status(500).json({ error: updateErr.message });
+        res.json({ id: id, name: name, description: description, min_order: minOrder, image: imagePath });
+      }
+    );
+  });
+});
+
+app.delete('/api/stores/:id', function (req, res) {
+  const id = Number(req.params.id);
+  db.serialize(function () {
+    db.run('DELETE FROM products WHERE store_id = ?', [id], function () {});
+    db.run('DELETE FROM stores WHERE id = ?', [id], function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ deleted: true, id: id });
+    });
+  });
+});
+
+// ================= المنتجات =================
 app.get('/api/products', function (req, res) {
   const storeId = req.query.store_id;
   const q = req.query.q;
@@ -200,7 +228,7 @@ app.get('/api/products', function (req, res) {
 
   if (storeId) {
     sql += ' AND store_id = ?';
-    params.push(storeId);
+    params.push(Number(storeId));
   }
   if (q) {
     sql += ' AND name LIKE ?';
@@ -209,38 +237,35 @@ app.get('/api/products', function (req, res) {
   sql += ' ORDER BY id DESC';
 
   db.all(sql, params, function (err, rows) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows);
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows || []);
   });
 });
 
 app.post('/api/products', upload.single('image'), function (req, res) {
-  const storeId = req.body.store_id;
-  const name = req.body.name;
-  const price = req.body.price;
-  const cartonQty = Number(req.body.carton_qty) || 1;
-  const stock = Number(req.body.stock) || 0;
+  const body = req.body || {};
+  const storeId = Number(body.store_id);
+  const name = (body.name || '').trim();
+  const price = Number(body.price);
+  const cartonQty = Number(body.carton_qty) || 1;
+  const stock = Number(body.stock) || 0;
 
-  if (!storeId || !name || price === undefined) {
-    return res.status(400).json({ error: 'store_id, name, and price are required' });
+  if (!storeId || !name || isNaN(price)) {
+    return res.status(400).json({ error: 'المتجر واسم المنتج والسعر مطلوبة' });
   }
 
-  const imagePath = req.file ? '/uploads/' + req.file.filename : req.body.image || '';
+  const imagePath = req.file ? '/uploads/' + req.file.filename : body.image || '';
 
   db.run(
     'INSERT INTO products (store_id, name, price, carton_qty, image, stock) VALUES (?, ?, ?, ?, ?, ?)',
-    [Number(storeId), name, Number(price), cartonQty, imagePath, stock],
+    [storeId, name, price, cartonQty, imagePath, stock],
     function (err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
+      if (err) return res.status(500).json({ error: err.message });
       res.status(201).json({
         id: this.lastID,
-        store_id: Number(storeId),
+        store_id: storeId,
         name: name,
-        price: Number(price),
+        price: price,
         carton_qty: cartonQty,
         image: imagePath,
         stock: stock
@@ -249,69 +274,132 @@ app.post('/api/products', upload.single('image'), function (req, res) {
   );
 });
 
+app.put('/api/products/:id', upload.single('image'), function (req, res) {
+  const id = Number(req.params.id);
+  const body = req.body || {};
+
+  db.get('SELECT * FROM products WHERE id = ?', [id], function (err, prod) {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!prod) return res.status(404).json({ error: 'المنتج غير موجود' });
+
+    const storeId = body.store_id ? Number(body.store_id) : prod.store_id;
+    const name = (body.name || prod.name).trim();
+    const price = body.price !== undefined && body.price !== '' ? Number(body.price) : prod.price;
+    const cartonQty = body.carton_qty !== undefined && body.carton_qty !== '' ? (Number(body.carton_qty) || 1) : prod.carton_qty;
+    const stock = body.stock !== undefined && body.stock !== '' ? (Number(body.stock) || 0) : prod.stock;
+    const imagePath = req.file ? '/uploads/' + req.file.filename : (body.image !== undefined ? body.image : prod.image);
+
+    db.run(
+      'UPDATE products SET store_id = ?, name = ?, price = ?, carton_qty = ?, image = ?, stock = ? WHERE id = ?',
+      [storeId, name, price, cartonQty, imagePath, stock, id],
+      function (updateErr) {
+        if (updateErr) return res.status(500).json({ error: updateErr.message });
+        res.json({ id: id, store_id: storeId, name: name, price: price, carton_qty: cartonQty, image: imagePath, stock: stock });
+      }
+    );
+  });
+});
+
+app.delete('/api/products/:id', function (req, res) {
+  const id = Number(req.params.id);
+  db.run('DELETE FROM products WHERE id = ?', [id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ deleted: true, id: id });
+  });
+});
+
+// ================= الطلبيات =================
 app.post('/api/orders', function (req, res) {
-  const customerName = req.body.customer_name;
-  const phone = req.body.phone;
-  const wilaya = req.body.wilaya || '';
-  const items = req.body.items;
-  const total = Number(req.body.total) || 0;
+  const body = req.body || {};
+  const customerName = (body.customer_name || body.name || '').trim();
+  const phone = (body.phone || '').trim();
+  const location = (body.location || body.address || body.wilaya || '').trim();
+  const items = body.items;
+  const total = Number(body.total) || 0;
 
   if (!customerName || !phone || !items) {
-    return res.status(400).json({ error: 'customer_name, phone, and items are required' });
+    return res.status(400).json({ error: 'الاسم ورقم الهاتف والمنتجات مطلوبة' });
   }
 
   const itemsJson = typeof items === 'string' ? items : JSON.stringify(items);
 
   db.run(
-    'INSERT INTO orders (customer_name, phone, wilaya, items_json, total) VALUES (?, ?, ?, ?, ?)',
-    [customerName, phone, wilaya, itemsJson, total],
+    'INSERT INTO orders (customer_name, phone, location, wilaya, items_json, total, status) VALUES (?, ?, ?, ?, ?, ?, "pending")',
+    [customerName, phone, location, location, itemsJson, total],
     function (err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      res.status(201).json({ id: this.lastID, status: 'pending' });
+      if (err) return res.status(500).json({ error: err.message });
+      res.status(201).json({ id: this.lastID, status: 'pending', location: location });
     }
   );
 });
 
 app.get('/api/orders', function (req, res) {
-  db.all('SELECT * FROM orders ORDER BY id DESC', [], function (err, rows) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows);
+  const status = req.query.status;
+  let sql = 'SELECT * FROM orders';
+  const params = [];
+  if (status) {
+    sql += ' WHERE status = ?';
+    params.push(status);
+  }
+  sql += ' ORDER BY id DESC';
+
+  db.all(sql, params, function (err, rows) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows || []);
   });
 });
 
-app.post('/api/custom-requests', upload.single('image'), function (req, res) {
-  const customerName = req.body.customer_name;
-  const phone = req.body.phone;
-  const notes = req.body.notes || '';
+app.patch('/api/orders/:id/confirm', function (req, res) {
+  const id = Number(req.params.id);
+  db.run('UPDATE orders SET status = "confirmed" WHERE id = ?', [id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ confirmed: true, id: id });
+  });
+});
 
-  if (!customerName || !phone) {
-    return res.status(400).json({ error: 'customer_name and phone are required' });
+app.delete('/api/orders/:id', function (req, res) {
+  const id = Number(req.params.id);
+  db.run('DELETE FROM orders WHERE id = ?', [id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ deleted: true, id: id });
+  });
+});
+
+// ================= طلبات المنتجات الخاصة =================
+app.post('/api/custom-requests', upload.single('image'), function (req, res) {
+  const body = req.body || {};
+  const customerName = (body.customer_name || body.name || 'زبون').trim();
+  const phone = (body.phone || '').trim();
+  const notes = (body.notes || body.product_name || body.description || '').trim();
+
+  if (!phone) {
+    return res.status(400).json({ error: 'رقم الهاتف مطلوب' });
   }
 
-  const imagePath = req.file ? '/uploads/' + req.file.filename : '';
+  const imagePath = req.file ? '/uploads/' + req.file.filename : body.image || '';
 
   db.run(
-    'INSERT INTO custom_requests (customer_name, phone, notes, image) VALUES (?, ?, ?, ?)',
+    'INSERT INTO custom_requests (customer_name, phone, notes, image, status) VALUES (?, ?, ?, ?, "new")',
     [customerName, phone, notes, imagePath],
     function (err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      res.status(201).json({ id: this.lastID, status: 'new', image: imagePath });
+      if (err) return res.status(500).json({ error: err.message });
+      res.status(201).json({ id: this.lastID, status: 'new', image: imagePath, notes: notes });
     }
   );
 });
 
 app.get('/api/custom-requests', function (req, res) {
   db.all('SELECT * FROM custom_requests ORDER BY id DESC', [], function (err, rows) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows);
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows || []);
+  });
+});
+
+app.delete('/api/custom-requests/:id', function (req, res) {
+  const id = Number(req.params.id);
+  db.run('DELETE FROM custom_requests WHERE id = ?', [id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ deleted: true, id: id });
   });
 });
 
