@@ -11,7 +11,7 @@
       background: #0f172a; color: #fff; padding: 14px 20px;
       display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
     }
-    .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .header-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
     .btn {
       border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer;
       font-weight: bold; font-size: 13px; text-decoration: none; display: inline-block;
@@ -76,12 +76,12 @@
       <h2>إضافة متجر جديد (سوبرات، غيار سيارات، حلويات...)</h2>
       <form id="addStoreForm" enctype="multipart/form-data">
         <div class="form-grid">
-          <input type="text" name="name" placeholder="اسم المتجر (مثال: سوبرات)" required />
-          <input type="text" name="description" placeholder="وصف قصير" />
-          <input type="number" name="min_order" placeholder="أقل طلبية (د.ج)" />
-          <input type="file" name="image" accept="image/*" />
+          <input type="text" id="storeNameInput" name="name" placeholder="اسم المتجر (مثال: سوبرات)" required />
+          <input type="text" id="storeDescInput" name="description" placeholder="وصف قصير" />
+          <input type="number" id="storeMinOrderInput" name="min_order" placeholder="أقل طلبية (د.ج)" />
+          <input type="file" id="storeImageInput" name="image" accept="image/*" />
         </div>
-        <button type="submit" id="addStoreBtn" class="btn btn-primary" style="width:100%; padding:10px;">إضافة المتجر</button>
+        <button type="submit" id="addStoreSubmitBtn" class="btn btn-primary" style="width:100%; padding:10px;">إضافة المتجر</button>
       </form>
     </div>
 
@@ -149,6 +149,10 @@
     let modalProductsCache = [];
     let currentModalStoreId = null;
 
+    if (window.location.search && window.location.search.includes('name=')) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     function escapeHtml(str) {
       return String(str || '')
         .replace(/&/g, '&amp;')
@@ -212,19 +216,29 @@
       });
     }
 
-    document.getElementById('addStoreForm').addEventListener('submit', async (e) => {
+    async function handleAddStoreSubmit(e) {
       e.preventDefault();
-      const btn = document.getElementById('addStoreBtn');
+      e.stopPropagation();
+      const form = document.getElementById('addStoreForm');
+      const btn = document.getElementById('addStoreSubmitBtn');
+      const nameVal = document.getElementById('storeNameInput').value.trim();
+
+      if (!nameVal) {
+        alert('يرجى إدخال اسم المتجر');
+        return;
+      }
+
       btn.disabled = true;
       try {
-        const formData = new FormData(e.target);
+        const formData = new FormData(form);
+        formData.set('name', nameVal);
         const res = await fetch('/api/stores', { method: 'POST', body: formData });
         const data = await res.json();
         if (!res.ok) {
           alert(data.error || 'حدث خطأ أثناء الإضافة');
           return;
         }
-        e.target.reset();
+        form.reset();
         await loadStores();
         alert('تمت إضافة المتجر بنجاح');
       } catch (err) {
@@ -232,7 +246,9 @@
       } finally {
         btn.disabled = false;
       }
-    });
+    }
+
+    document.getElementById('addStoreForm').addEventListener('submit', handleAddStoreSubmit);
 
     async function editStore(id, oldName, oldDesc) {
       const name = prompt('الاسم الجديد للمتجر:', oldName);
