@@ -11,7 +11,7 @@
       background: #0f172a; color: #fff; padding: 14px 20px;
       display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
     }
-    .header-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+    .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .btn {
       border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer;
       font-weight: bold; font-size: 13px; text-decoration: none; display: inline-block;
@@ -49,7 +49,6 @@
     }
     .order-item-chip img { width: 42px; height: 42px; border-radius: 6px; object-fit: cover; }
 
-    /* نافذة إدارة منتجات المتجر */
     .modal-backdrop {
       position: fixed; inset: 0; background: rgba(15,23,42,0.6);
       display: none; align-items: center; justify-content: center; z-index: 1000; padding: 15px;
@@ -73,7 +72,6 @@
   </header>
 
   <div class="container">
-    <!-- إضافة متجر جديد -->
     <div class="card">
       <h2>إضافة متجر جديد (سوبرات، غيار سيارات، حلويات...)</h2>
       <form id="addStoreForm" enctype="multipart/form-data">
@@ -83,17 +81,15 @@
           <input type="number" name="min_order" placeholder="أقل طلبية (د.ج)" />
           <input type="file" name="image" accept="image/*" />
         </div>
-        <button type="submit" class="btn btn-primary" style="width:100%; padding:10px;">إضافة المتجر</button>
+        <button type="submit" id="addStoreBtn" class="btn btn-primary" style="width:100%; padding:10px;">إضافة المتجر</button>
       </form>
     </div>
 
-    <!-- المتاجر الحالية -->
     <div class="card">
       <h2>المتاجر الحالية (تعديل الاسم أو الصورة أو إدارة المنتجات)</h2>
       <div id="storesList"></div>
     </div>
 
-    <!-- إضافة منتج جديد -->
     <div class="card">
       <h2>إضافة منتج جديد</h2>
       <form id="addProductForm" enctype="multipart/form-data">
@@ -109,25 +105,22 @@
       </form>
     </div>
 
-    <!-- الطلبيات الواردة من أصحاب المحلات -->
     <div class="card" id="ordersSection">
       <h2>الطلبيات الواردة من أصحاب المحلات</h2>
       <div id="ordersList"></div>
     </div>
 
-    <!-- طلبات منتجات غير متوفرة -->
     <div class="card">
       <h2>طلبات منتجات غير متوفرة (مع صور التوضيح)</h2>
       <div id="customRequestsList"></div>
     </div>
   </div>
 
-  <!-- نافذة تعديل/إضافة/مسح منتجات متجر محدد -->
   <div id="storeProductsModal" class="modal-backdrop">
     <div class="modal">
       <div class="modal-header">
         <h3 id="modalStoreTitle" style="margin:0;">منتجات المتجر</h3>
-        <button class="close-btn" onclick="closeStoreProductsModal()">×</button>
+        <button type="button" class="close-btn" onclick="closeStoreProductsModal()">×</button>
       </div>
 
       <form id="modalProductForm" enctype="multipart/form-data" style="margin-bottom:16px; background:#f8fafc; padding:12px; border-radius:10px;">
@@ -151,8 +144,19 @@
   </div>
 
   <script>
+    const FALLBACK_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 60 60"><rect width="60" height="60" fill="#e2e8f0"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="#64748b" font-size="11" font-family="Arial">IMG</text></svg>');
     let storesCache = [];
+    let modalProductsCache = [];
     let currentModalStoreId = null;
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
 
     function goToOrders() {
       loadOrders();
@@ -164,7 +168,7 @@
       storesCache = await res.json();
 
       const select = document.getElementById('mainProductStoreSelect');
-      select.innerHTML = storesCache.map((s) => <option value="${s.id}">${s.name}</option>).join('');
+      select.innerHTML = storesCache.map((s) => <option value="${s.id}">${escapeHtml(s.name)}</option>).join('');
 
       const list = document.getElementById('storesList');
       if (!storesCache.length) {
@@ -175,37 +179,59 @@
       list.innerHTML = storesCache.map((s) => `
         <div class="store-row">
           <div class="row-left">
-            <img src="${s.image || 'https://via.placeholder.com/52'}" alt="${s.name}" />
+            <img src="${s.image || FALLBACK_IMG}" alt="${escapeHtml(s.name)}" onerror="this.src='${FALLBACK_IMG}'" />
             <div>
-              <strong>${s.name}</strong>
-              <div style="font-size:12px;color:#64748b;">${s.description || ''} ${s.min_order ? '• أقل طلبية: ' + s.min_order + ' د.ج' : ''}</div>
+              <strong>${escapeHtml(s.name)}</strong>
+              <div style="font-size:12px;color:#64748b;">${escapeHtml(s.description || '')} ${s.min_order ? '• أقل طلبية: ' + Number(s.min_order) + ' د.ج' : ''}</div>
             </div>
           </div>
           <div class="row-actions">
-            <button type="button" class="btn btn-info" onclick="openStoreProductsModal(${s.id}, '${escapeHtml(s.name)}')">منتجات المتجر</button>
-            <button type="button" class="btn btn-warning" onclick="editStore(${s.id}, '${escapeHtml(s.name)}', '${escapeHtml(s.description || '')}')">تعديل</button>
-            <button type="button" class="btn btn-danger" onclick="deleteStore(${s.id})">حذف</button>
+            <button type="button" class="btn btn-info" data-open-store="${s.id}">منتجات المتجر</button>
+            <button type="button" class="btn btn-warning" data-edit-store="${s.id}">تعديل</button>
+            <button type="button" class="btn btn-danger" data-delete-store="${s.id}">حذف</button>
           </div>
         </div>
       `).join('');
-    }
 
-    function escapeHtml(str) {
-      return String(str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      list.querySelectorAll('[data-open-store]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const st = storesCache.find((x) => String(x.id) === btn.dataset.openStore);
+          if (st) openStoreProductsModal(st.id, st.name);
+        });
+      });
+
+      list.querySelectorAll('[data-edit-store]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const st = storesCache.find((x) => String(x.id) === btn.dataset.editStore);
+          if (st) editStore(st.id, st.name, st.description || '');
+        });
+      });
+
+      list.querySelectorAll('[data-delete-store]').forEach((btn) => {
+        btn.addEventListener('click', () => deleteStore(Number(btn.dataset.deleteStore)));
+      });
     }
 
     document.getElementById('addStoreForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const formData = new FormData(e.target);
-      const res = await fetch('/api/stores', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || 'حدث خطأ أثناء الإضافة');
-        return;
+      const btn = document.getElementById('addStoreBtn');
+      btn.disabled = true;
+      try {
+        const formData = new FormData(e.target);
+        const res = await fetch('/api/stores', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error || 'حدث خطأ أثناء الإضافة');
+          return;
+        }
+        e.target.reset();
+        await loadStores();
+        alert('تمت إضافة المتجر بنجاح');
+      } catch (err) {
+        alert('تعذر الاتصال بالسيرفر: ' + err.message);
+      } finally {
+        btn.disabled = false;
       }
-      e.target.reset();
-      await loadStores();
-      alert('تمت إضافة المتجر بنجاح');
     });
 
     async function editStore(id, oldName, oldDesc) {
@@ -252,7 +278,6 @@
       alert('تم حفظ المنتج بنجاح');
     });
 
-    // ================= إدارة منتجات المتجر في نافذة منبثقة =================
     async function openStoreProductsModal(storeId, storeName) {
       currentModalStoreId = storeId;
       document.getElementById('modalStoreId').value = storeId;
@@ -279,29 +304,40 @@
 
     async function loadModalProducts(storeId) {
       const res = await fetch('/api/products?store_id=' + storeId);
-      const products = await res.json();
+      modalProductsCache = await res.json();
       const list = document.getElementById('modalProductsList');
 
-      if (!products.length) {
+      if (!modalProductsCache.length) {
         list.innerHTML = '<p style="color:#64748b;">لا توجد منتجات في هذا المتجر بعد.</p>';
         return;
       }
 
-      list.innerHTML = products.map((p) => `
+      list.innerHTML = modalProductsCache.map((p) => `
         <div class="product-row store-row">
           <div class="row-left">
-            <img src="${p.image || 'https://via.placeholder.com/52'}" alt="${p.name}" />
+            <img src="${p.image || FALLBACK_IMG}" alt="${escapeHtml(p.name)}" onerror="this.src='${FALLBACK_IMG}'" />
             <div>
-              <strong>${p.name}</strong>
+              <strong>${escapeHtml(p.name)}</strong>
               <div style="font-size:12px;color:#475569;">السعر: ${p.price} د.ج • الكرتون: ${p.carton_qty || 1} • المخزون: ${p.stock || 0}</div>
             </div>
           </div>
           <div class="row-actions">
-            <button type="button" class="btn btn-warning" onclick='startEditModalProduct(${JSON.stringify(p)})'>تعديل</button>
-            <button type="button" class="btn btn-danger" onclick="deleteProduct(${p.id})">مسح</button>
+            <button type="button" class="btn btn-warning" data-edit-prod="${p.id}">تعديل</button>
+            <button type="button" class="btn btn-danger" data-del-prod="${p.id}">مسح</button>
           </div>
         </div>
       `).join('');
+
+      list.querySelectorAll('[data-edit-prod]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const prod = modalProductsCache.find((x) => String(x.id) === btn.dataset.editProd);
+          if (prod) startEditModalProduct(prod);
+        });
+      });
+
+      list.querySelectorAll('[data-del-prod]').forEach((btn) => {
+        btn.addEventListener('click', () => deleteProduct(Number(btn.dataset.delProd)));
+      });
     }
 
     function startEditModalProduct(prod) {
@@ -343,7 +379,6 @@
       }
     }
 
-    // ================= الطلبيات مع الصور وتأكيد الطلبية =================
     async function loadOrders() {
       const res = await fetch('/api/orders?status=pending');
       const orders = await res.json();
@@ -365,9 +400,9 @@
         const locText = o.location || o.wilaya || 'غير محدد';
         const itemsHtml = items.map((it) => `
           <div class="order-item-chip">
-            <img src="${it.image || 'https://via.placeholder.com/42'}" alt="${it.name || ''}" />
+            <img src="${it.image || FALLBACK_IMG}" alt="${escapeHtml(it.name || '')}" onerror="this.src='${FALLBACK_IMG}'" />
             <div>
-              <div><strong>${it.name || 'منتج'}</strong></div>
+              <div><strong>${escapeHtml(it.name || 'منتج')}</strong></div>
               <div style="font-size:12px;color:#475569;">الكمية: ${it.qty || 1} × ${it.price || 0} د.ج</div>
             </div>
           </div>
@@ -375,8 +410,8 @@
 
         return `
           <div class="order-card" id="order-card-${o.id}">
-            <div><strong>طلب #${o.id} - ${o.customer_name}</strong> (${o.phone})</div>
-            <div style="font-size:13px; color:#334155; margin-top:4px;">الموقع: ${locText}</div>
+            <div><strong>طلب #${o.id} - ${escapeHtml(o.customer_name)}</strong> (${escapeHtml(o.phone)})</div>
+            <div style="font-size:13px; color:#334155; margin-top:4px;">الموقع: ${escapeHtml(locText)}</div>
             <div class="order-items">${itemsHtml}</div>
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-top:8px;">
               <strong>المجموع: ${o.total} د.ج</strong>
@@ -398,7 +433,6 @@
       }
     }
 
-    // ================= طلبات المنتجات الخاصة =================
     async function loadCustomRequests() {
       const res = await fetch('/api/custom-requests');
       const reqs = await res.json();
@@ -412,10 +446,10 @@
       list.innerHTML = reqs.map((r) => `
         <div class="custom-card store-row">
           <div class="row-left">
-            ${r.image ? <img src="${r.image}" alt="صورة الطلب" /> : ''}
+            ${r.image ? <img src="${r.image}" alt="صورة الطلب" onerror="this.src='${FALLBACK_IMG}'" /> : ''}
             <div>
-              <strong>${r.customer_name}</strong> (${r.phone})
-              <div style="font-size:13px;color:#334155;margin-top:4px;">${r.notes || ''}</div>
+              <strong>${escapeHtml(r.customer_name)}</strong> (${escapeHtml(r.phone)})
+              <div style="font-size:13px;color:#334155;margin-top:4px;">${escapeHtml(r.notes || '')}</div>
             </div>
           </div>
           <button type="button" class="btn btn-danger" onclick="deleteCustomRequest(${r.id})">حذف</button>
