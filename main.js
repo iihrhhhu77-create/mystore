@@ -1,4 +1,4 @@
-console.log('BOOT_VERSION_2026_V7');
+console.log('BOOT_VERSION_2026_V8');
 
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
@@ -67,7 +67,7 @@ db.serialize(function () {
   );
 });
 
-function findFileRecursive(startDir, targetName, depth) {
+function findPageFileRecursive(startDir, basePageName, depth) {
   if (depth > 3) return null;
   let entries = [];
   try {
@@ -79,11 +79,14 @@ function findFileRecursive(startDir, targetName, depth) {
   for (const entry of entries) {
     if (entry.name === 'node_modules' || entry.name === '.git') continue;
     const fullPath = path.join(startDir, entry.name);
-    if (entry.isFile() && entry.name.toLowerCase() === targetName.toLowerCase()) {
+    const lower = entry.name.toLowerCase();
+    const targetLower = basePageName.toLowerCase();
+
+    if (entry.isFile() && (lower === targetLower || lower.startsWith(targetLower + '.'))) {
       return fullPath;
     }
     if (entry.isDirectory()) {
-      const found = findFileRecursive(fullPath, targetName, depth + 1);
+      const found = findPageFileRecursive(fullPath, basePageName, depth + 1);
       if (found) return found;
     }
   }
@@ -112,7 +115,7 @@ function listAllFiles(startDir, depth) {
 }
 
 app.get('/', function (req, res) {
-  const foundPath = findFileRecursive(baseDir, 'index.html', 0);
+  const foundPath = findPageFileRecursive(baseDir, 'index.html', 0);
   if (foundPath) {
     try {
       const html = fs.readFileSync(foundPath, 'utf8');
@@ -130,7 +133,7 @@ app.get('/', function (req, res) {
 });
 
 app.get('/admin.html', function (req, res) {
-  const foundPath = findFileRecursive(baseDir, 'admin.html', 0);
+  const foundPath = findPageFileRecursive(baseDir, 'admin.html', 0);
   if (foundPath) {
     try {
       const html = fs.readFileSync(foundPath, 'utf8');
