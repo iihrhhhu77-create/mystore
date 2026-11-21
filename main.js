@@ -6,7 +6,7 @@ const Database = require('better-sqlite3');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const BOOT_VERSION = 'BOOT_VERSION_2026_V14';
+const BOOT_VERSION = 'BOOT_VERSION_2026_V15';
 
 const baseDir = __dirname;
 const publicDir = path.join(baseDir, 'public');
@@ -22,55 +22,54 @@ const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS stores (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    slug TEXT UNIQUE,
-    description TEXT DEFAULT '',
-    image TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS products (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    store_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    price REAL NOT NULL DEFAULT 0,
-    carton_qty INTEGER NOT NULL DEFAULT 1,
-    stock INTEGER NOT NULL DEFAULT 0,
-    image TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
-  );
-
-  CREATE TABLE IF NOT EXISTS orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_name TEXT NOT NULL,
-    phone TEXT NOT NULL,
-    location TEXT DEFAULT '',
-    wilaya TEXT DEFAULT '',
-    items_json TEXT NOT NULL,
-    total REAL NOT NULL DEFAULT 0,
-    status TEXT NOT NULL DEFAULT 'pending',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS custom_requests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_name TEXT NOT NULL,
-    phone TEXT NOT NULL,
-    notes TEXT DEFAULT '',
-    image TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-`);
+db.exec(
+  'CREATE TABLE IF NOT EXISTS stores (' +
+    'id INTEGER PRIMARY KEY AUTOINCREMENT,' +
+    'name TEXT NOT NULL,' +
+    'slug TEXT UNIQUE,' +
+    "description TEXT DEFAULT ''," +
+    "image TEXT DEFAULT ''," +
+    'created_at DATETIME DEFAULT CURRENT_TIMESTAMP' +
+  ');' +
+  'CREATE TABLE IF NOT EXISTS products (' +
+    'id INTEGER PRIMARY KEY AUTOINCREMENT,' +
+    'store_id INTEGER NOT NULL,' +
+    'name TEXT NOT NULL,' +
+    'price REAL NOT NULL DEFAULT 0,' +
+    'carton_qty INTEGER NOT NULL DEFAULT 1,' +
+    'stock INTEGER NOT NULL DEFAULT 0,' +
+    "image TEXT DEFAULT ''," +
+    'created_at DATETIME DEFAULT CURRENT_TIMESTAMP,' +
+    'FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE' +
+  ');' +
+  'CREATE TABLE IF NOT EXISTS orders (' +
+    'id INTEGER PRIMARY KEY AUTOINCREMENT,' +
+    'customer_name TEXT NOT NULL,' +
+    'phone TEXT NOT NULL,' +
+    "location TEXT DEFAULT ''," +
+    "wilaya TEXT DEFAULT ''," +
+    'items_json TEXT NOT NULL,' +
+    'total REAL NOT NULL DEFAULT 0,' +
+    "status TEXT NOT NULL DEFAULT 'pending'," +
+    'created_at DATETIME DEFAULT CURRENT_TIMESTAMP' +
+  ');' +
+  'CREATE TABLE IF NOT EXISTS custom_requests (' +
+    'id INTEGER PRIMARY KEY AUTOINCREMENT,' +
+    'customer_name TEXT NOT NULL,' +
+    'phone TEXT NOT NULL,' +
+    "notes TEXT DEFAULT ''," +
+    "image TEXT DEFAULT ''," +
+    'created_at DATETIME DEFAULT CURRENT_TIMESTAMP' +
+  ');'
+);
 
 function ensureColumn(table, column, definition) {
-  const cols = db.prepare(PRAGMA table_info(${table})).all();
-  const exists = cols.some((c) => c.name === column);
+  const cols = db.prepare('PRAGMA table_info(' + table + ')').all();
+  const exists = cols.some(function (c) {
+    return c.name === column;
+  });
   if (!exists) {
-    db.exec(ALTER TABLE ${table} ADD COLUMN ${column} ${definition});
+    db.exec('ALTER TABLE ' + table + ' ADD COLUMN ' + column + ' ' + definition);
   }
 }
 
@@ -92,7 +91,7 @@ function makeSlug(name) {
       .toLowerCase()
       .replace(/[^a-z0-9\u0600-\u06FF]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'store';
-  return ${base}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)};
+  return base + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
 }
 
 const storage = multer.diskStorage({
@@ -102,12 +101,12 @@ const storage = multer.diskStorage({
   filename: function (req, file, cb) {
     const ext = path.extname(file.originalname || '').toLowerCase();
     const safeExt = ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext) ? ext : '.jpg';
-    cb(null, ${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt});
+    cb(null, Date.now() + '-' + Math.round(Math.random() * 1e9) + safeExt);
   }
 });
 
 const upload = multer({
-  storage,
+  storage: storage,
   limits: { fileSize: 8 * 1024 * 1024 }
 });
 
@@ -166,7 +165,7 @@ app.post('/api/stores', upload.single('image'), function (req, res) {
     if (!name) {
       return res.status(400).json({ error: 'اسم المتجر مطلوب' });
     }
-    const image = req.file ? /uploads/${req.file.filename} : '';
+    const image = req.file ? '/uploads/' + req.file.filename : '';
     const slug = makeSlug(name);
 
     const info = db
@@ -193,7 +192,7 @@ app.put('/api/stores/:id', upload.single('image'), function (req, res) {
       req.body && typeof req.body.description !== 'undefined'
         ? String(req.body.description).trim()
         : existing.description || '';
-    const image = req.file ? /uploads/${req.file.filename} : existing.image || '';
+    const image = req.file ? '/uploads/' + req.file.filename : existing.image || '';
 
     db.prepare('UPDATE stores SET name = ?, description = ?, image = ? WHERE id = ?').run(
       name,
@@ -253,7 +252,7 @@ app.post('/api/products', upload.single('image'), function (req, res) {
       return res.status(400).json({ error: 'المتجر المحدد غير موجود' });
     }
 
-    const image = req.file ? /uploads/${req.file.filename} : '';
+    const image = req.file ? '/uploads/' + req.file.filename : '';
     const info = db
       .prepare(
         'INSERT INTO products (store_id, name, price, carton_qty, stock, image) VALUES (?, ?, ?, ?, ?, ?)'
@@ -289,7 +288,7 @@ app.put('/api/products/:id', upload.single('image'), function (req, res) {
       req.body && typeof req.body.stock !== 'undefined' && req.body.stock !== ''
         ? Math.max(0, Number(req.body.stock))
         : existing.stock || 0;
-    const image = req.file ? /uploads/${req.file.filename} : existing.image || '';
+    const image = req.file ? '/uploads/' + req.file.filename : existing.image || '';
 
     db.prepare(
       'UPDATE products SET store_id = ?, name = ?, price = ?, carton_qty = ?, stock = ?, image = ? WHERE id = ?'
@@ -408,7 +407,7 @@ app.post('/api/custom-requests', upload.single('image'), function (req, res) {
     const customerName = String((req.body && req.body.customer_name) || '').trim();
     const phone = String((req.body && req.body.phone) || '').trim();
     const notes = String((req.body && req.body.notes) || '').trim();
-    const image = req.file ? /uploads/${req.file.filename} : '';
+    const image = req.file ? '/uploads/' + req.file.filename : '';
 
     if (!customerName || !phone) {
       return res.status(400).json({ error: 'الاسم ورقم الهاتف مطلوبان' });
@@ -443,6 +442,6 @@ app.use(function (err, req, res, next) {
 });
 
 app.listen(PORT, '0.0.0.0', function () {
-  console.log(${BOOT_VERSION} running on port ${PORT});
+  console.log(BOOT_VERSION + ' running on port ' + PORT);
   console.log('Connected to SQLite database.');
 });
