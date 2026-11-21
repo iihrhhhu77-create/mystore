@@ -1,4 +1,4 @@
-console.log('BOOT_VERSION_2026_V5');
+console.log('BOOT_VERSION_2026_V6');
 
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
@@ -12,45 +12,13 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-function findStaticDir() {
-  const candidates = [
-    path.join(__dirname, 'public'),
-    path.join(process.cwd(), 'public'),
-    path.join(__dirname, '..', 'public')
-  ];
-
-  for (const dir of candidates) {
-    if (fs.existsSync(dir)) {
-      return dir;
-    }
-  }
-  return path.join(__dirname, 'public');
-}
-
-function findStaticFile(filename) {
-  const candidates = [
-    path.join(__dirname, 'public', filename),
-    path.join(process.cwd(), 'public', filename),
-    path.join(__dirname, filename),
-    path.join(process.cwd(), filename),
-    path.join(__dirname, '..', 'public', filename)
-  ];
-
-  for (const filePath of candidates) {
-    if (fs.existsSync(filePath)) {
-      return filePath;
-    }
-  }
-  return null;
-}
-
-const publicDir = findStaticDir();
+const publicDir = path.join(__dirname, 'public');
 app.use(express.static(publicDir));
 
 const uploadsDir = path.join(publicDir, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
+try {
   fs.mkdirSync(uploadsDir, { recursive: true });
-}
+} catch (e) {}
 app.use('/uploads', express.static(uploadsDir));
 
 const storage = multer.diskStorage({
@@ -93,45 +61,40 @@ db.serialize(function () {
   );
 });
 
-app.get('/', function (req, res) {
-  const indexPath = findStaticFile('index.html');
-  if (indexPath) {
+function readHtmlDirect(filename) {
+  const paths = [
+    path.join(__dirname, 'public', filename),
+    path.join(process.cwd(), 'public', filename),
+    path.join(__dirname, filename),
+    path.join(process.cwd(), filename)
+  ];
+
+  const errors = [];
+  for (const p of paths) {
     try {
-      const html = fs.readFileSync(indexPath, 'utf8');
-      return res.status(200).type('html').send(html);
+      const content = fs.readFileSync(p, 'utf8');
+      return { ok: true, content: content, path: p };
     } catch (err) {
-      return res.status(500).send('Error reading index.html: ' + err.message);
+      errors.push(p + ' => ' + err.message);
     }
   }
+  return { ok: false, errors: errors };
+}
 
-  const rootFiles = fs.existsSync(process.cwd()) ? fs.readdirSync(process.cwd()) : [];
-  const dirFiles = fs.existsSync(publicDir) ? fs.readdirSync(publicDir) : [];
-
-  return res.status(404).send(
-    'index.html not found\ncwd: ' +
-      process.cwd() +
-      '\n__dirname: ' +
-      __dirname +
-      '\npublicDir: ' +
-      publicDir +
-      '\nrootFiles: ' +
-      JSON.stringify(rootFiles) +
-      '\npublicFiles: ' +
-      JSON.stringify(dirFiles)
-  );
+app.get('/', function (req, res) {
+  const result = readHtmlDirect('index.html');
+  if (result.ok) {
+    return res.status(200).type('html').send(result.content);
+  }
+  return res.status(404).send('Failed to load index.html:\n' + result.errors.join('\n'));
 });
 
 app.get('/admin.html', function (req, res) {
-  const adminPath = findStaticFile('admin.html');
-  if (adminPath) {
-    try {
-      const html = fs.readFileSync(adminPath, 'utf8');
-      return res.status(200).type('html').send(html);
-    } catch (err) {
-      return res.status(500).send('Error reading admin.html: ' + err.message);
-    }
+  const result = readHtmlDirect('admin.html');
+  if (result.ok) {
+    return res.status(200).type('html').send(result.content);
   }
-  return res.status(404).send('admin.html not found');
+  return res.status(404).send('Failed to load admin.html:\n' + result.errors.join('\n'));
 });
 
 app.get('/api/health', function (req, res) {
