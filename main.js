@@ -1,4 +1,4 @@
-console.log('BOOT_VERSION_2026_V8');
+console.log('BOOT_VERSION_2026_V9');
 
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
@@ -51,8 +51,10 @@ const db = new sqlite3.Database(dbPath, function (err) {
 
 db.serialize(function () {
   db.run(
-    'CREATE TABLE IF NOT EXISTS stores (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, slug TEXT UNIQUE NOT NULL, description TEXT, min_order INTEGER DEFAULT 0)'
+    'CREATE TABLE IF NOT EXISTS stores (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, slug TEXT UNIQUE NOT NULL, description TEXT, min_order INTEGER DEFAULT 0, image TEXT)'
   );
+
+  db.run('ALTER TABLE stores ADD COLUMN image TEXT', function () {});
 
   db.run(
     'CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, store_id INTEGER NOT NULL, name TEXT NOT NULL, price REAL NOT NULL, carton_qty INTEGER DEFAULT 1, image TEXT, stock INTEGER DEFAULT 0, FOREIGN KEY (store_id) REFERENCES stores(id))'
@@ -158,19 +160,22 @@ app.get('/api/stores', function (req, res) {
   });
 });
 
-app.post('/api/stores', function (req, res) {
-  const name = req.body.name;
-  const slug = req.body.slug;
-  const description = req.body.description || '';
-  const minOrder = Number(req.body.min_order) || 0;
+app.post('/api/stores', upload.single('image'), function (req, res) {
+  const body = req.body || {};
+  const name = body.name || body.store_name || body.title || '';
+  const description = body.description || '';
+  const minOrder = Number(body.min_order) || 0;
+  const rawSlug = body.slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const slug = (rawSlug || 'store') + '-' + Date.now();
+  const imagePath = req.file ? '/uploads/' + req.file.filename : body.image || '';
 
-  if (!name || !slug) {
-    return res.status(400).json({ error: 'name and slug are required' });
+  if (!name) {
+    return res.status(400).json({ error: 'اسم المتجر مطلوب' });
   }
 
   db.run(
-    'INSERT INTO stores (name, slug, description, min_order) VALUES (?, ?, ?, ?)',
-    [name, slug, description, minOrder],
+    'INSERT INTO stores (name, slug, description, min_order, image) VALUES (?, ?, ?, ?, ?)',
+    [name, slug, description, minOrder, imagePath],
     function (err) {
       if (err) {
         return res.status(500).json({ error: err.message });
@@ -180,7 +185,8 @@ app.post('/api/stores', function (req, res) {
         name: name,
         slug: slug,
         description: description,
-        min_order: minOrder
+        min_order: minOrder,
+        image: imagePath
       });
     }
   );
