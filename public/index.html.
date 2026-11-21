@@ -1,265 +1,435 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>منصة الجملة 24/7</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>جملة ماركت 24/7</title>
+  <style>
+    * { box-sizing: border-box; font-family: Tahoma, Arial, sans-serif; }
+    body { margin: 0; background: #f4f6f9; color: #1e293b; }
+    header {
+      background: #0f172a; color: #fff; padding: 14px 20px;
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+    }
+    .brand { font-size: 20px; font-weight: bold; }
+    .top-actions { display: flex; gap: 10px; align-items: center; }
+    .btn {
+      border: none; border-radius: 8px; padding: 9px 14px; cursor: pointer;
+      font-weight: bold; font-size: 14px; transition: 0.2s;
+    }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-success { background: #16a34a; color: #fff; }
+    .btn-warning { background: #f59e0b; color: #fff; }
+    .btn-outline { background: #fff; color: #0f172a; border: 1px solid #cbd5e1; }
+    .container { max-width: 1200px; margin: 20px auto; padding: 0 15px; }
+    .stores-bar { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 18px; }
+    .store-card {
+      background: #fff; border: 2px solid transparent; border-radius: 12px;
+      padding: 10px 14px; min-width: 190px; cursor: pointer; display: flex; align-items: center; gap: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+    .store-card.active { border-color: #2563eb; background: #eff6ff; }
+    .store-card img { width: 46px; height: 46px; border-radius: 8px; object-fit: cover; background: #e2e8f0; }
+    .search-row { display: flex; gap: 10px; margin-bottom: 18px; }
+    .search-row input {
+      flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 15px;
+    }
+    .products-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px;
+    }
+    .product-card {
+      background: #fff; border-radius: 12px; padding: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .product-card img {
+      width: 100%; height: 155px; object-fit: cover; border-radius: 8px; background: #f1f5f9;
+    }
+    .prod-title { font-weight: bold; font-size: 15px; margin: 10px 0 4px; }
+    .prod-meta { color: #475569; font-size: 13px; margin-bottom: 10px; }
+    .qty-box { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
+    .qty-box button {
+      width: 32px; height: 32px; border-radius: 6px; border: 1px solid #cbd5e1;
+      background: #f8fafc; font-weight: bold; cursor: pointer; font-size: 16px;
+    }
+    .qty-box span { min-width: 28px; text-align: center; font-weight: bold; }
+
+    /* Modal السلة */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(15,23,42,0.55);
+      display: none; align-items: center; justify-content: center; z-index: 999; padding: 15px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: #fff; width: 100%; max-width: 520px; border-radius: 14px;
+      padding: 20px; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .close-btn { background: none; border: none; font-size: 22px; cursor: pointer; color: #64748b; }
+    .cart-item {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      border-bottom: 1px solid #e2e8f0; padding: 8px 0;
+    }
+    .cart-item img { width: 46px; height: 46px; border-radius: 6px; object-fit: cover; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 13px; font-weight: bold; margin-bottom: 5px; }
+    .form-group input, .form-group textarea {
+      width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 14px;
+    }
+    .location-row { display: flex; gap: 8px; align-items: center; }
+    .location-row input { flex: 1; }
+    .btn-loc {
+      background: #0284c7; color: #fff; border: none; border-radius: 8px;
+      padding: 9px 12px; font-weight: bold; cursor: pointer; white-space: nowrap;
+    }
+    .custom-box {
+      background: #fff; border-radius: 12px; padding: 18px; margin-top: 28px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+  </style>
 </head>
-<body class="bg-gray-100 pb-24">
+<body>
+  <header>
+    <div class="brand">جملة ماركت 24/7</div>
+    <div class="top-actions">
+      <button class="btn btn-warning" onclick="openCart()">
+        السلة (<span id="cartCount">0</span>)
+      </button>
+    </div>
+  </header>
 
-    <header class="bg-blue-700 text-white p-4 sticky top-0 z-40 shadow flex justify-between items-center">
-        <div class="flex items-center gap-3">
-            <button id="backBtn" onclick="goHome()" class="hidden bg-blue-800 px-3 py-1.5 rounded-lg text-xs font-bold">← المتاجر</button>
-            <div>
-                <h1 id="headerTitle" class="font-bold text-base">جملة ماركت 24/7</h1>
-                <p id="headerSub" class="text-xs text-blue-200">تسوق بالجملة لأصحاب المحلات</p>
-            </div>
-        </div>
-        <button onclick="toggleCart()" class="bg-white text-blue-700 px-3.5 py-2 rounded-full font-bold text-xs shadow flex items-center gap-1.5">
-            <span>السلة</span>
-            <span id="cartCount" class="bg-red-600 text-white rounded-full px-2 py-0.5">0</span>
-        </button>
-    </header>
+  <div class="container">
+    <div id="storesBar" class="stores-bar"></div>
 
-    <main class="max-w-4xl mx-auto p-4 space-y-6">
-        <section id="storesView">
-            <h2 class="font-bold text-gray-800 mb-3">اختر المتجر:</h2>
-            <div id="storesGrid" class="grid grid-cols-2 md:grid-cols-3 gap-4"></div>
-        </section>
-
-        <section id="storeView" class="hidden space-y-5">
-            <input type="text" id="searchInput" onkeyup="loadProducts()" placeholder="ابحث عن منتج داخل المتجر..." class="w-full p-3.5 rounded-xl border bg-white shadow-sm outline-none focus:ring-2 focus:ring-blue-500">
-
-            <div id="productsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
-
-            <div class="bg-white p-5 rounded-2xl border border-dashed border-blue-400 shadow-sm">
-                <h3 class="font-bold text-gray-800 text-sm mb-1">لم تجد المنتج المطلوب؟</h3>
-                <p class="text-xs text-gray-500 mb-3">اكتب اسم المنتج والكمية وأرفق صورة للتوضيح</p>
-                <form id="customReqForm" class="space-y-3">
-                    <input type="text" name="description" required placeholder="اسم المنتج والكمية..." class="w-full p-2.5 border rounded-lg text-sm">
-                    <input type="file" name="image" accept="image/*" class="w-full p-2 border rounded-lg text-xs">
-                    <button type="submit" class="w-full bg-gray-800 text-white py-2.5 rounded-lg text-sm font-bold">إرسال الطلب الخاص</button>
-                </form>
-            </div>
-        </section>
-    </main>
-
-    <div id="cartModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-end md:items-center justify-center">
-        <div class="bg-white w-full max-w-lg rounded-t-2xl md:rounded-2xl p-5 max-h-[90vh] overflow-y-auto space-y-4">
-            <div class="flex justify-between items-center border-b pb-2">
-                <h2 class="font-bold text-base">سلة المشتريات</h2>
-                <button onclick="toggleCart()" class="text-xl font-bold text-gray-500">&times;</button>
-            </div>
-            <div id="cartItems" class="space-y-2 text-sm"></div>
-            <div class="border-t pt-2 flex justify-between font-bold">
-                <span>المجموع:</span>
-                <span id="cartTotal" class="text-blue-700">0</span>
-            </div>
-            <form id="orderForm" class="space-y-2.5 bg-gray-50 p-3 rounded-xl">
-                <input type="text" id="custName" required placeholder="الاسم أو اسم المحل" class="w-full p-2.5 border rounded-lg text-sm bg-white">
-                <input type="tel" id="custPhone" required placeholder="رقم الهاتف" class="w-full p-2.5 border rounded-lg text-sm bg-white">
-                <input type="text" id="custLocation" required placeholder="الموقع / العنوان" class="w-full p-2.5 border rounded-lg text-sm bg-white">
-                <button type="submit" class="w-full bg-green-600 text-white py-3 rounded-xl font-bold text-sm">إرسال الطلبية</button>
-            </form>
-        </div>
+    <div class="search-row">
+      <input type="text" id="searchInput" placeholder="ابحث عن منتج..." oninput="loadProducts()" />
     </div>
 
-    <script>
-        var currentStoreId = null;
-        var currentProducts = [];
-        var cart = [];
+    <div id="productsGrid" class="products-grid"></div>
 
-        function loadStores() {
-            fetch('/api/stores')
-                .then(function (res) { return res.json(); })
-                .then(function (stores) {
-                    var grid = document.getElementById('storesGrid');
-                    if (!stores.length) {
-                        grid.innerHTML = '<p class="text-gray-500 col-span-2">لا توجد متاجر بعد. أضف متجراً من <a href="/admin.html" class="text-blue-600 underline">لوحة التحكم</a>.</p>';
-                        return;
-                    }
-                    var html = '';
-                    for (var i = 0; i < stores.length; i++) {
-                        var s = stores[i];
-                        var imgSrc = s.image ? s.image : 'https://placehold.co/300x200?text=Store';
-                        var safeName = s.name.replace(/'/g, "\\'");
-                        html += '<div onclick="openStore(' + s.id + ', \'' + safeName + '\')" class="bg-white rounded-2xl overflow-hidden shadow-sm border cursor-pointer hover:shadow-md transition">';
-                        html += '<img src="' + imgSrc + '" class="w-full h-36 object-cover bg-gray-100">';
-                        html += '<div class="p-3 text-center font-bold text-gray-800 text-sm">' + s.name + '</div>';
-                        html += '</div>';
-                    }
-                    grid.innerHTML = html;
-                });
-        }
+    <div class="custom-box">
+      <h3>لم تجد المنتج المطلوب؟</h3>
+      <p style="color:#64748b;font-size:13px;">اكتب اسم المنتج والكمية وأرفق صورة توضيحية وسنعمل على توفيره لك.</p>
+      <form id="customRequestForm" enctype="multipart/form-data">
+        <div class="form-group">
+          <label>الاسم أو اسم المحل</label>
+          <input type="text" name="customer_name" placeholder="مثال: محل النجاح" required />
+        </div>
+        <div class="form-group">
+          <label>رقم الهاتف</label>
+          <input type="text" name="phone" placeholder="05XXXXXXXX" required />
+        </div>
+        <div class="form-group">
+          <label>تفاصيل المنتج والكمية</label>
+          <textarea name="notes" rows="2" placeholder="اكتب اسم المنتج والكمية المطلوبة..." required></textarea>
+        </div>
+        <div class="form-group">
+          <label>صورة توضيحية (اختياري)</label>
+          <input type="file" name="image" accept="image/*" />
+        </div>
+        <button type="submit" class="btn btn-primary">إرسال الطلب الخاص</button>
+      </form>
+    </div>
+  </div>
 
-        function openStore(id, name) {
-            currentStoreId = id;
-            document.getElementById('storesView').classList.add('hidden');
-            document.getElementById('storeView').classList.remove('hidden');
-            document.getElementById('backBtn').classList.remove('hidden');
-            document.getElementById('headerTitle').innerText = name;
-            document.getElementById('headerSub').innerText = 'تصفح المنتجات وأضف للسلة';
-            document.getElementById('searchInput').value = '';
-            loadProducts();
-        }
+  <!-- نافذة سلة المشتريات -->
+  <div id="cartModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 style="margin:0;">سلة المشتريات</h3>
+        <button class="close-btn" onclick="closeCart()">×</button>
+      </div>
 
-        function goHome() {
-            currentStoreId = null;
-            document.getElementById('storeView').classList.add('hidden');
-            document.getElementById('storesView').classList.remove('hidden');
-            document.getElementById('backBtn').classList.add('hidden');
-            document.getElementById('headerTitle').innerText = 'جملة ماركت 24/7';
-            document.getElementById('headerSub').innerText = 'تسوق بالجملة لأصحاب المحلات';
-        }
+      <div id="cartItems"></div>
+      <div style="margin:12px 0; font-weight:bold; font-size:16px;">
+        المجموع: <span id="cartTotal">0</span> د.ج
+      </div>
 
-        function loadProducts() {
-            var q = encodeURIComponent(document.getElementById('searchInput').value || '');
-            fetch('/api/products?storeId=' + currentStoreId + '&q=' + q)
-                .then(function (res) { return res.json(); })
-                .then(function (products) {
-                    currentProducts = products;
-                    var grid = document.getElementById('productsGrid');
-                    if (!products.length) {
-                        grid.innerHTML = '<p class="text-gray-400 col-span-2 text-center py-4">لا توجد منتجات مطابقة</p>';
-                        return;
-                    }
-                    var html = '';
-                    for (var i = 0; i < products.length; i++) {
-                        var p = products[i];
-                        var step = p.is_carton ? Math.max(1, parseInt(p.step, 10) || 1) : 1;
-                        var imgSrc = p.image ? p.image : 'https://placehold.co/120x120?text=Product';
-                        html += '<div class="bg-white p-4 rounded-2xl shadow-sm border flex flex-col justify-between gap-3">';
-                        html += '<div class="flex gap-3">';
-                        html += '<img src="' + imgSrc + '" class="w-20 h-20 rounded-xl object-cover bg-gray-100">';
-                        html += '<div class="flex-1">';
-                        html += '<h3 class="font-bold text-gray-800 text-sm">' + p.name + '</h3>';
-                        html += '<p class="text-blue-600 font-bold text-sm mt-1">' + p.price + '</p>';
-                        if (p.fixed_note) {
-                            html += '<div class="mt-2 bg-amber-50 border border-amber-200 text-amber-900 text-xs p-2 rounded-lg select-none">' + p.fixed_note + '</div>';
-                        }
-                        html += '</div></div>';
-                        html += '<div class="flex items-center justify-between gap-2 pt-2 border-t">';
-                        html += '<div class="flex items-center border rounded-lg overflow-hidden bg-gray-50">';
-                        html += '<button type="button" onclick="changeQty(' + p.id + ', -' + step + ', ' + step + ')" class="px-3 py-1.5 bg-gray-200 font-bold">-</button>';
-                        html += '<input type="number" id="qty-' + p.id + '" value="' + step + '" onchange="validateQty(' + p.id + ', ' + step + ', ' + p.is_carton + ')" class="w-14 text-center font-bold text-sm bg-transparent outline-none">';
-                        html += '<button type="button" onclick="changeQty(' + p.id + ', ' + step + ', ' + step + ')" class="px-3 py-1.5 bg-gray-200 font-bold">+</button>';
-                        html += '</div>';
-                        html += '<button type="button" onclick="addToCart(' + p.id + ')" class="flex-1 bg-blue-600 text-white py-2 px-3 rounded-lg text-xs font-bold">أضف للسلة</button>';
-                        html += '</div></div>';
-                    }
-                    grid.innerHTML = html;
-                });
-        }
+      <form id="orderForm">
+        <div class="form-group">
+          <label>الاسم أو اسم المحل</label>
+          <input type="text" id="orderName" placeholder="الاسم أو اسم المحل" required />
+        </div>
+        <div class="form-group">
+          <label>رقم الهاتف</label>
+          <input type="text" id="orderPhone" placeholder="رقم الهاتف" required />
+        </div>
+        <div class="form-group">
+          <label>الموقع / العنوان</label>
+          <div class="location-row">
+            <input type="text" id="orderLocation" placeholder="الموقع / العنوان" required />
+            <button type="button" class="btn-loc" id="btnMyLocation" onclick="detectMyLocation()">موقعي</button>
+          </div>
+          <small id="locationStatus" style="color:#0284c7; display:block; margin-top:4px;"></small>
+        </div>
+        <button type="submit" class="btn btn-success" style="width:100%; padding:11px;">تأكيد الطلب</button>
+      </form>
+    </div>
+  </div>
 
-        function changeQty(id, delta, step) {
-            var inp = document.getElementById('qty-' + id);
-            var val = parseInt(inp.value, 10) || step;
-            val += delta;
-            if (val < step) val = step;
-            inp.value = val;
-        }
+  <script>
+    let selectedStoreId = null;
+    let cart = JSON.parse(localStorage.getItem('wholesale_cart') || '[]');
+    const cardQtys = {};
 
-        function validateQty(id, step, isCarton) {
-            var inp = document.getElementById('qty-' + id);
-            var val = parseInt(inp.value, 10) || step;
-            if (val < step) {
-                val = step;
-            } else if (isCarton) {
-                val = Math.floor(val / step) * step;
-                if (val < step) val = step;
-            }
-            inp.value = val;
-        }
+    function saveCart() {
+      localStorage.setItem('wholesale_cart', JSON.stringify(cart));
+      updateCartBadge();
+    }
 
-        function addToCart(id) {
-            var prod = null;
-            for (var i = 0; i < currentProducts.length; i++) {
-                if (currentProducts[i].id === id) { prod = currentProducts[i]; break; }
-            }
-            if (!prod) return;
-            var qty = parseInt(document.getElementById('qty-' + id).value, 10) || 1;
-            var existing = null;
-            for (var j = 0; j < cart.length; j++) {
-                if (cart[j].id === id) { existing = cart[j]; break; }
-            }
-            if (existing) existing.qty += qty;
-            else cart.push({ id: prod.id, name: prod.name, price: prod.price, qty: qty });
-            updateCartUI();
-            alert('تمت الإضافة إلى السلة');
-        }
+    function updateCartBadge() {
+      const totalItems = cart.reduce((acc, item) => acc + (Number(item.qty) || 1), 0);
+      document.getElementById('cartCount').textContent = totalItems;
+    }
 
-        function updateCartUI() {
-            document.getElementById('cartCount').innerText = cart.length;
-            var total = 0;
-            var container = document.getElementById('cartItems');
-            if (!cart.length) {
-                container.innerHTML = '<p class="text-gray-400 text-center py-3">السلة فارغة</p>';
-                document.getElementById('cartTotal').innerText = '0';
-                return;
-            }
-            var html = '';
-            for (var i = 0; i < cart.length; i++) {
-                var item = cart[i];
-                var sub = item.price * item.qty;
-                total += sub;
-                html += '<div class="flex justify-between items-center bg-gray-50 p-2.5 rounded-lg">';
-                html += '<div><p class="font-bold">' + item.name + '</p><p class="text-xs text-gray-500">' + item.qty + ' × ' + item.price + '</p></div>';
-                html += '<div class="flex items-center gap-2"><span class="font-bold text-blue-700">' + sub + '</span><button type="button" onclick="removeItem(' + i + ')" class="text-red-500 text-xs font-bold">حذف</button></div>';
-                html += '</div>';
-            }
-            container.innerHTML = html;
-            document.getElementById('cartTotal').innerText = total;
-        }
+    async function loadStores() {
+      const res = await fetch('/api/stores');
+      const stores = await res.json();
+      const bar = document.getElementById('storesBar');
+      bar.innerHTML = '';
 
-        function removeItem(idx) {
-            cart.splice(idx, 1);
-            updateCartUI();
-        }
-
-        function toggleCart() {
-            document.getElementById('cartModal').classList.toggle('hidden');
-            updateCartUI();
-        }
-
-        document.getElementById('customReqForm').addEventListener('submit', function (e) {
-            e.preventDefault();
-            var fd = new FormData(e.target);
-            if (currentStoreId) fd.append('store_id', currentStoreId);
-            fetch('/api/custom-requests', { method: 'POST', body: fd })
-                .then(function () {
-                    e.target.reset();
-                    alert('تم إرسال طلب المنتج الخاص بنجاح');
-                });
-        });
-
-        document.getElementById('orderForm').addEventListener('submit', function (e) {
-            e.preventDefault();
-            if (!cart.length) return alert('السلة فارغة');
-            var total = 0;
-            for (var i = 0; i < cart.length; i++) {
-                total += (cart[i].price * cart[i].qty);
-            }
-            fetch('/api/orders', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    customer_name: document.getElementById('custName').value,
-                    phone: document.getElementById('custPhone').value,
-                    location: document.getElementById('custLocation').value,
-                    items: cart,
-                    total: total
-                })
-            }).then(function () {
-                cart = [];
-                updateCartUI();
-                toggleCart();
-                e.target.reset();
-                alert('تم إرسال طلبيتك بنجاح!');
-            });
-        });
-
+      const allCard = document.createElement('div');
+      allCard.className = 'store-card' + (selectedStoreId === null ? ' active' : '');
+      allCard.innerHTML = '<div><strong>كل المتاجر</strong><div style="font-size:12px;color:#64748b;">عرض الكل</div></div>';
+      allCard.onclick = () => {
+        selectedStoreId = null;
         loadStores();
-    </script>
+        loadProducts();
+      };
+      bar.appendChild(allCard);
+
+      stores.forEach((s) => {
+        const div = document.createElement('div');
+        div.className = 'store-card' + (selectedStoreId === s.id ? ' active' : '');
+        div.innerHTML = `
+          <img src="${s.image || 'https://via.placeholder.com/50?text=Store'}" alt="${s.name}" />
+          <div>
+            <strong>${s.name}</strong>
+            <div style="font-size:12px;color:#64748b;">${s.description || ''}</div>
+          </div>
+        `;
+        div.onclick = () => {
+          selectedStoreId = s.id;
+          loadStores();
+          loadProducts();
+        };
+        bar.appendChild(div);
+      });
+    }
+
+    async function loadProducts() {
+      const q = encodeURIComponent(document.getElementById('searchInput').value.trim());
+      let url = '/api/products?';
+      if (selectedStoreId) url += 'store_id=' + selectedStoreId + '&';
+      if (q) url += 'q=' + q;
+
+      const res = await fetch(url);
+      const products = await res.json();
+      const grid = document.getElementById('productsGrid');
+      grid.innerHTML = '';
+
+      if (!products.length) {
+        grid.innerHTML = '<p style="color:#64748b;">لا توجد منتجات حالياً.</p>';
+        return;
+      }
+
+      products.forEach((p) => {
+        if (!cardQtys[p.id]) cardQtys[p.id] = 1;
+        const step = Number(p.carton_qty) > 1 ? Number(p.carton_qty) : 1;
+
+        const card = document.createElement('div');
+        card.className = 'product-card';
+        card.innerHTML = `
+          <div>
+            <img src="${p.image || 'https://via.placeholder.com/220x150?text=Product'}" alt="${p.name}" />
+            <div class="prod-title">${p.name}</div>
+            <div class="prod-meta">
+              السعر: <strong>${p.price}</strong> د.ج
+              ${step > 1 ?  • كرتون: ${step} : ''}
+            </div>
+          </div>
+          <div>
+            <div class="qty-box">
+              <button type="button" onclick="changeCardQty(${p.id}, ${step}, -1)">-</button>
+              <span id="pqty-${p.id}">${cardQtys[p.id]}</span>
+              <button type="button" onclick="changeCardQty(${p.id}, ${step}, 1)">+</button>
+            </div>
+            <button type="button" class="btn btn-primary" style="width:100%;" onclick='addToCart(${JSON.stringify(p)})'>
+              إضافة إلى السلة
+            </button>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function changeCardQty(id, step, dir) {
+      const current = cardQtys[id] || step;
+      const next = current + dir * step;
+      cardQtys[id] = next >= step ? next : step;
+      document.getElementById('pqty-' + id).textContent = cardQtys[id];
+    }
+
+    function addToCart(product) {
+      const step = Number(product.carton_qty) > 1 ? Number(product.carton_qty) : 1;
+      const qty = cardQtys[product.id] || step;
+      const existing = cart.find((item) => item.id === product.id);
+      if (existing) {
+        existing.qty += qty;
+      } else {
+        cart.push({
+          id: product.id,
+          name: product.name,
+          price: Number(product.price),
+          carton_qty: step,
+          image: product.image || '',
+          qty: qty
+        });
+      }
+      saveCart();
+      alert('تمت إضافة المنتج إلى السلة');
+    }
+
+    function openCart() {
+      renderCart();
+      document.getElementById('cartModal').classList.add('open');
+    }
+
+    function closeCart() {
+      document.getElementById('cartModal').classList.remove('open');
+    }
+
+    function renderCart() {
+      const container = document.getElementById('cartItems');
+      const totalEl = document.getElementById('cartTotal');
+      if (!cart.length) {
+        container.innerHTML = '<p style="text-align:center;color:#64748b;">السلة فارغة</p>';
+        totalEl.textContent = '0';
+        return;
+      }
+
+      let total = 0;
+      container.innerHTML = cart.map((item, idx) => {
+        const lineTotal = (Number(item.price) || 0) * (Number(item.qty) || 1);
+        total += lineTotal;
+        return `
+          <div class="cart-item">
+            <img src="${item.image || 'https://via.placeholder.com/46'}" alt="${item.name}" />
+            <div style="flex:1;">
+              <div><strong>${item.name}</strong></div>
+              <div style="font-size:12px;color:#475569;">${item.qty} × ${item.price} د.ج = <strong>${lineTotal}</strong> د.ج</div>
+            </div>
+            <button type="button" class="btn btn-outline" onclick="removeCartItem(${idx})">حذف</button>
+          </div>
+        `;
+      }).join('');
+      totalEl.textContent = total;
+    }
+
+    function removeCartItem(idx) {
+      cart.splice(idx, 1);
+      saveCart();
+      renderCart();
+    }
+
+    function detectMyLocation() {
+      const statusEl = document.getElementById('locationStatus');
+      const locInput = document.getElementById('orderLocation');
+      const btn = document.getElementById('btnMyLocation');
+
+      if (!navigator.geolocation) {
+        statusEl.textContent = 'المتصفح لا يدعم تحديد الموقع تلقائياً.';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'جاري التحديد...';
+      statusEl.textContent = 'يرجى السماح بالوصول إلى الموقع...';
+
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const lat = pos.coords.latitude.toFixed(6);
+          const lng = pos.coords.longitude.toFixed(6);
+          const mapLink = https://maps.google.com/?q=${lat},${lng};
+          let addressText = GPS (${lat}, ${lng}) - ${mapLink};
+
+          try {
+            const r = await fetch(https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=ar);
+            const data = await r.json();
+            if (data && data.display_name) {
+              addressText = ${data.display_name} (${mapLink});
+            }
+          } catch (e) {}
+
+          locInput.value = addressText;
+          statusEl.textContent = 'تم تحديد موقعك بنجاح.';
+          btn.disabled = false;
+          btn.textContent = 'موقعي';
+        },
+        (err) => {
+          statusEl.textContent = 'تعذر تحديد الموقع تلقائياً، يمكنك كتابته يدوياً.';
+          btn.disabled = false;
+          btn.textContent = 'موقعي';
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+
+    document.getElementById('orderForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!cart.length) {
+        alert('السلة فارغة');
+        return;
+      }
+
+      const customer_name = document.getElementById('orderName').value.trim();
+      const phone = document.getElementById('orderPhone').value.trim();
+      const location = document.getElementById('orderLocation').value.trim();
+      const total = cart.reduce((acc, item) => acc + (Number(item.price) || 0) * (Number(item.qty) || 1), 0);
+
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_name,
+          phone,
+          location,
+          wilaya: location,
+          items: cart,
+          total
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'حدث خطأ أثناء إرسال الطلب');
+        return;
+      }
+
+      cart = [];
+      saveCart();
+      closeCart();
+      alert('تم إرسال طلبيتك بنجاح!');
+    });
+
+    document.getElementById('customRequestForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const res = await fetch('/api/custom-requests', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'حدث خطأ أثناء إرسال الطلب الخاص');
+        return;
+      }
+      e.target.reset();
+      alert('تم إرسال طلب المنتج الخاص بنجاح');
+    });
+
+    updateCartBadge();
+    loadStores();
+    loadProducts();
+  </script>
 </body>
 </html>
