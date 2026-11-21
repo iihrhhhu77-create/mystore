@@ -2,11 +2,11 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
-const Database = require('better-sqlite3');
+const sqlite3 = require('sqlite3').verbose();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const BOOT_VERSION = 'BOOT_VERSION_2026_V11';
+const BOOT_VERSION = 'BOOT_VERSION_2026_V12';
 
 const baseDir = __dirname;
 const publicDir = path.join(baseDir, 'public');
@@ -18,72 +18,85 @@ fs.mkdirSync(uploadsDir, { recursive: true });
 const dbPath = process.env.SQLITE_PATH || path.join(baseDir, 'data.sqlite');
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
-const db = new Database(dbPath);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const db = new sqlite3.Database(dbPath);
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS stores (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    slug TEXT UNIQUE,
-    description TEXT DEFAULT '',
-    image TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS products (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    store_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    price REAL NOT NULL DEFAULT 0,
-    carton_qty INTEGER NOT NULL DEFAULT 1,
-    stock INTEGER NOT NULL DEFAULT 0,
-    image TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
-  );
-
-  CREATE TABLE IF NOT EXISTS orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_name TEXT NOT NULL,
-    phone TEXT NOT NULL,
-    location TEXT DEFAULT '',
-    wilaya TEXT DEFAULT '',
-    items_json TEXT NOT NULL,
-    total REAL NOT NULL DEFAULT 0,
-    status TEXT NOT NULL DEFAULT 'pending',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS custom_requests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_name TEXT NOT NULL,
-    phone TEXT NOT NULL,
-    notes TEXT DEFAULT '',
-    image TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-`);
-
-function ensureColumn(table, column, definition) {
-  const cols = db.prepare(PRAGMA table_info(${table})).all();
-  const exists = cols.some((c) => c.name === column);
-  if (!exists) {
-    db.exec(ALTER TABLE ${table} ADD COLUMN ${column} ${definition});
-  }
+function runSql(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) return reject(err);
+      resolve({ lastID: this.lastID, changes: this.changes });
+    });
+  });
 }
 
-ensureColumn('stores', 'slug', 'TEXT');
-ensureColumn('stores', 'description', "TEXT DEFAULT ''");
-ensureColumn('stores', 'image', "TEXT DEFAULT ''");
-ensureColumn('products', 'carton_qty', 'INTEGER NOT NULL DEFAULT 1');
-ensureColumn('products', 'stock', 'INTEGER NOT NULL DEFAULT 0');
-ensureColumn('products', 'image', "TEXT DEFAULT ''");
-ensureColumn('orders', 'location', "TEXT DEFAULT ''");
-ensureColumn('orders', 'wilaya', "TEXT DEFAULT ''");
-ensureColumn('orders', 'status', "TEXT NOT NULL DEFAULT 'pending'");
-ensureColumn('custom_requests', 'image', "TEXT DEFAULT ''");
+function getSql(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => {
+      if (err) return reject(err);
+      resolve(row);
+    });
+  });
+}
+
+function allSql(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) return reject(err);
+      resolve(rows || []);
+    });
+  });
+}
+
+async function initDb() {
+  await runSql(`
+    CREATE TABLE IF NOT EXISTS stores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      slug TEXT UNIQUE,
+      description TEXT DEFAULT '',
+      image TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await runSql(`
+    CREATE TABLE IF NOT EXISTS products (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      store_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      price REAL NOT NULL DEFAULT 0,
+      carton_qty INTEGER NOT NULL DEFAULT 1,
+      stock INTEGER NOT NULL DEFAULT 0,
+      image TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await runSql(`
+    CREATE TABLE IF NOT EXISTS orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      location TEXT DEFAULT '',
+      wilaya TEXT DEFAULT '',
+      items_json TEXT NOT NULL,
+      total REAL NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await runSql(`
+    CREATE TABLE IF NOT EXISTS custom_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      notes TEXT DEFAULT '',
+      image TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+}
 
 function makeSlug(name) {
   const base = String(name || 'store')
@@ -113,7 +126,6 @@ const upload = multer({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// تقديم ملفات public أولاً قبل أي مسارات أخرى
 app.use(express.static(publicDir));
 app.use('/uploads', express.static(uploadsDir));
 
@@ -149,17 +161,16 @@ app.get('/api/health', function (req, res) {
   });
 });
 
-// المتاجر
-app.get('/api/stores', function (req, res) {
+app.get('/api/stores', async function (req, res) {
   try {
-    const rows = db.prepare('SELECT * FROM stores ORDER BY id DESC').all();
+    const rows = await allSql('SELECT * FROM stores ORDER BY id DESC');
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/stores', upload.single('image'), function (req, res) {
+app.post('/api/stores', upload.single('image'), async function (req, res) {
   try {
     const name = String((req.body && req.body.name) || '').trim();
     const description = String((req.body && req.body.description) || '').trim();
@@ -169,21 +180,22 @@ app.post('/api/stores', upload.single('image'), function (req, res) {
     const image = req.file ? /uploads/${req.file.filename} : '';
     const slug = makeSlug(name);
 
-    const info = db
-      .prepare('INSERT INTO stores (name, slug, description, image) VALUES (?, ?, ?, ?)')
-      .run(name, slug, description, image);
+    const info = await runSql(
+      'INSERT INTO stores (name, slug, description, image) VALUES (?, ?, ?, ?)',
+      [name, slug, description, image]
+    );
 
-    const created = db.prepare('SELECT * FROM stores WHERE id = ?').get(info.lastInsertRowid);
+    const created = await getSql('SELECT * FROM stores WHERE id = ?', [info.lastID]);
     res.status(201).json(created);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.put('/api/stores/:id', upload.single('image'), function (req, res) {
+app.put('/api/stores/:id', upload.single('image'), async function (req, res) {
   try {
     const id = Number(req.params.id);
-    const existing = db.prepare('SELECT * FROM stores WHERE id = ?').get(id);
+    const existing = await getSql('SELECT * FROM stores WHERE id = ?', [id]);
     if (!existing) {
       return res.status(404).json({ error: 'المتجر غير موجود' });
     }
@@ -195,48 +207,43 @@ app.put('/api/stores/:id', upload.single('image'), function (req, res) {
         : existing.description || '';
     const image = req.file ? /uploads/${req.file.filename} : existing.image || '';
 
-    db.prepare('UPDATE stores SET name = ?, description = ?, image = ? WHERE id = ?').run(
-      name,
-      description,
-      image,
-      id
+    await runSql(
+      'UPDATE stores SET name = ?, description = ?, image = ? WHERE id = ?',
+      [name, description, image, id]
     );
 
-    const updated = db.prepare('SELECT * FROM stores WHERE id = ?').get(id);
+    const updated = await getSql('SELECT * FROM stores WHERE id = ?', [id]);
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.delete('/api/stores/:id', function (req, res) {
+app.delete('/api/stores/:id', async function (req, res) {
   try {
     const id = Number(req.params.id);
-    const info = db.prepare('DELETE FROM stores WHERE id = ?').run(id);
+    const info = await runSql('DELETE FROM stores WHERE id = ?', [id]);
     res.json({ deleted: info.changes > 0 });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// المنتجات
-app.get('/api/products', function (req, res) {
+app.get('/api/products', async function (req, res) {
   try {
     const storeId = req.query.store_id ? Number(req.query.store_id) : null;
     if (storeId) {
-      const rows = db
-        .prepare('SELECT * FROM products WHERE store_id = ? ORDER BY id DESC')
-        .all(storeId);
+      const rows = await allSql('SELECT * FROM products WHERE store_id = ? ORDER BY id DESC', [storeId]);
       return res.json(rows);
     }
-    const rows = db.prepare('SELECT * FROM products ORDER BY id DESC').all();
+    const rows = await allSql('SELECT * FROM products ORDER BY id DESC');
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/products', upload.single('image'), function (req, res) {
+app.post('/api/products', upload.single('image'), async function (req, res) {
   try {
     const storeId = Number(req.body && req.body.store_id);
     const name = String((req.body && req.body.name) || '').trim();
@@ -248,29 +255,23 @@ app.post('/api/products', upload.single('image'), function (req, res) {
       return res.status(400).json({ error: 'المتجر واسم المنتج مطلوبان' });
     }
 
-    const store = db.prepare('SELECT id FROM stores WHERE id = ?').get(storeId);
-    if (!store) {
-      return res.status(400).json({ error: 'المتجر المحدد غير موجود' });
-    }
-
     const image = req.file ? /uploads/${req.file.filename} : '';
-    const info = db
-      .prepare(
-        'INSERT INTO products (store_id, name, price, carton_qty, stock, image) VALUES (?, ?, ?, ?, ?, ?)'
-      )
-      .run(storeId, name, price, cartonQty, stock, image);
+    const info = await runSql(
+      'INSERT INTO products (store_id, name, price, carton_qty, stock, image) VALUES (?, ?, ?, ?, ?, ?)',
+      [storeId, name, price, cartonQty, stock, image]
+    );
 
-    const created = db.prepare('SELECT * FROM products WHERE id = ?').get(info.lastInsertRowid);
+    const created = await getSql('SELECT * FROM products WHERE id = ?', [info.lastID]);
     res.status(201).json(created);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.put('/api/products/:id', upload.single('image'), function (req, res) {
+app.put('/api/products/:id', upload.single('image'), async function (req, res) {
   try {
     const id = Number(req.params.id);
-    const existing = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
+    const existing = await getSql('SELECT * FROM products WHERE id = ?', [id]);
     if (!existing) {
       return res.status(404).json({ error: 'المنتج غير موجود' });
     }
@@ -291,45 +292,43 @@ app.put('/api/products/:id', upload.single('image'), function (req, res) {
         : existing.stock || 0;
     const image = req.file ? /uploads/${req.file.filename} : existing.image || '';
 
-    db.prepare(
-      'UPDATE products SET store_id = ?, name = ?, price = ?, carton_qty = ?, stock = ?, image = ? WHERE id = ?'
-    ).run(storeId, name, price, cartonQty, stock, image, id);
+    await runSql(
+      'UPDATE products SET store_id = ?, name = ?, price = ?, carton_qty = ?, stock = ?, image = ? WHERE id = ?',
+      [storeId, name, price, cartonQty, stock, image, id]
+    );
 
-    const updated = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
+    const updated = await getSql('SELECT * FROM products WHERE id = ?', [id]);
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.delete('/api/products/:id', function (req, res) {
+app.delete('/api/products/:id', async function (req, res) {
   try {
     const id = Number(req.params.id);
-    const info = db.prepare('DELETE FROM products WHERE id = ?').run(id);
+    const info = await runSql('DELETE FROM products WHERE id = ?', [id]);
     res.json({ deleted: info.changes > 0 });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// الطلبيات
-app.get('/api/orders', function (req, res) {
+app.get('/api/orders', async function (req, res) {
   try {
     const status = req.query.status ? String(req.query.status) : null;
     if (status) {
-      const rows = db
-        .prepare('SELECT * FROM orders WHERE status = ? ORDER BY id DESC')
-        .all(status);
+      const rows = await allSql('SELECT * FROM orders WHERE status = ? ORDER BY id DESC', [status]);
       return res.json(rows);
     }
-    const rows = db.prepare('SELECT * FROM orders ORDER BY id DESC').all();
+    const rows = await allSql('SELECT * FROM orders ORDER BY id DESC');
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/orders', function (req, res) {
+app.post('/api/orders', async function (req, res) {
   try {
     const customerName = String((req.body && req.body.customer_name) || '').trim();
     const phone = String((req.body && req.body.phone) || '').trim();
@@ -343,23 +342,22 @@ app.post('/api/orders', function (req, res) {
       return res.status(400).json({ error: 'الاسم ورقم الهاتف مطلوبان' });
     }
 
-    const info = db
-      .prepare(
-        'INSERT INTO orders (customer_name, phone, location, wilaya, items_json, total, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      )
-      .run(customerName, phone, location, wilaya, itemsJson, total, 'pending');
+    const info = await runSql(
+      'INSERT INTO orders (customer_name, phone, location, wilaya, items_json, total, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [customerName, phone, location, wilaya, itemsJson, total, 'pending']
+    );
 
-    const created = db.prepare('SELECT * FROM orders WHERE id = ?').get(info.lastInsertRowid);
+    const created = await getSql('SELECT * FROM orders WHERE id = ?', [info.lastID]);
     res.status(201).json(created);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.patch('/api/orders/:id/confirm', function (req, res) {
+app.patch('/api/orders/:id/confirm', async function (req, res) {
   try {
     const id = Number(req.params.id);
-    const existing = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+    const existing = await getSql('SELECT * FROM orders WHERE id = ?', [id]);
     if (!existing) {
       return res.status(404).json({ error: 'الطلبية غير موجودة' });
     }
@@ -372,38 +370,34 @@ app.patch('/api/orders/:id/confirm', function (req, res) {
         items = [];
       }
 
-      const deductStmt = db.prepare(
-        'UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?'
-      );
       for (const item of items) {
         const prodId = Number(item.product_id || item.id);
         const qty = Number(item.qty || 1);
         if (prodId && qty > 0) {
-          deductStmt.run(qty, prodId);
+          await runSql('UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?', [qty, prodId]);
         }
       }
 
-      db.prepare("UPDATE orders SET status = 'confirmed' WHERE id = ?").run(id);
+      await runSql("UPDATE orders SET status = 'confirmed' WHERE id = ?", [id]);
     }
 
-    const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+    const updated = await getSql('SELECT * FROM orders WHERE id = ?', [id]);
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// طلبات المنتجات الخاصة
-app.get('/api/custom-requests', function (req, res) {
+app.get('/api/custom-requests', async function (req, res) {
   try {
-    const rows = db.prepare('SELECT * FROM custom_requests ORDER BY id DESC').all();
+    const rows = await allSql('SELECT * FROM custom_requests ORDER BY id DESC');
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/custom-requests', upload.single('image'), function (req, res) {
+app.post('/api/custom-requests', upload.single('image'), async function (req, res) {
   try {
     const customerName = String((req.body && req.body.customer_name) || '').trim();
     const phone = String((req.body && req.body.phone) || '').trim();
@@ -414,28 +408,28 @@ app.post('/api/custom-requests', upload.single('image'), function (req, res) {
       return res.status(400).json({ error: 'الاسم ورقم الهاتف مطلوبان' });
     }
 
-    const info = db
-      .prepare('INSERT INTO custom_requests (customer_name, phone, notes, image) VALUES (?, ?, ?, ?)')
-      .run(customerName, phone, notes, image);
+    const info = await runSql(
+      'INSERT INTO custom_requests (customer_name, phone, notes, image) VALUES (?, ?, ?, ?)',
+      [customerName, phone, notes, image]
+    );
 
-    const created = db.prepare('SELECT * FROM custom_requests WHERE id = ?').get(info.lastInsertRowid);
+    const created = await getSql('SELECT * FROM custom_requests WHERE id = ?', [info.lastID]);
     res.status(201).json(created);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.delete('/api/custom-requests/:id', function (req, res) {
+app.delete('/api/custom-requests/:id', async function (req, res) {
   try {
     const id = Number(req.params.id);
-    const info = db.prepare('DELETE FROM custom_requests WHERE id = ?').run(id);
+    const info = await runSql('DELETE FROM custom_requests WHERE id = ?', [id]);
     res.json({ deleted: info.changes > 0 });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// معالج أخطاء عام يعيد JSON دائماً
 app.use(function (err, req, res, next) {
   if (err) {
     return res.status(400).json({ error: err.message || 'خطأ في معالجة الطلب' });
@@ -443,6 +437,13 @@ app.use(function (err, req, res, next) {
   next();
 });
 
-app.listen(PORT, '0.0.0.0', function () {
-  console.log(${BOOT_VERSION} running on port ${PORT});
-});
+initDb()
+  .then(() => {
+    app.listen(PORT, '0.0.0.0', function () {
+      console.log(${BOOT_VERSION} running on port ${PORT});
+    });
+  })
+  .catch((err) => {
+    console.error('Failed to initialize DB:', err);
+    process.exit(1);
+  });
