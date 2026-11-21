@@ -1,4 +1,4 @@
-console.log('BOOT_VERSION_2026_V6');
+console.log('BOOT_VERSION_2026_V7');
 
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
@@ -12,7 +12,13 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const publicDir = path.join(__dirname, 'public');
+const baseDir = __dirname;
+const publicDir = path.join(baseDir, 'public');
+
+try {
+  fs.mkdirSync(publicDir, { recursive: true });
+} catch (e) {}
+
 app.use(express.static(publicDir));
 
 const uploadsDir = path.join(publicDir, 'uploads');
@@ -34,7 +40,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-const dbPath = path.join(__dirname, 'database.sqlite');
+const dbPath = path.join(baseDir, 'database.sqlite');
 const db = new sqlite3.Database(dbPath, function (err) {
   if (err) {
     console.error('SQLite connection error:', err.message);
@@ -61,44 +67,83 @@ db.serialize(function () {
   );
 });
 
-function readHtmlDirect(filename) {
-  const paths = [
-    path.join(__dirname, 'public', filename),
-    path.join(process.cwd(), 'public', filename),
-    path.join(__dirname, filename),
-    path.join(process.cwd(), filename)
-  ];
+function findFileRecursive(startDir, targetName, depth) {
+  if (depth > 3) return null;
+  let entries = [];
+  try {
+    entries = fs.readdirSync(startDir, { withFileTypes: true });
+  } catch (e) {
+    return null;
+  }
 
-  const errors = [];
-  for (const p of paths) {
-    try {
-      const content = fs.readFileSync(p, 'utf8');
-      return { ok: true, content: content, path: p };
-    } catch (err) {
-      errors.push(p + ' => ' + err.message);
+  for (const entry of entries) {
+    if (entry.name === 'node_modules' || entry.name === '.git') continue;
+    const fullPath = path.join(startDir, entry.name);
+    if (entry.isFile() && entry.name.toLowerCase() === targetName.toLowerCase()) {
+      return fullPath;
+    }
+    if (entry.isDirectory()) {
+      const found = findFileRecursive(fullPath, targetName, depth + 1);
+      if (found) return found;
     }
   }
-  return { ok: false, errors: errors };
+  return null;
+}
+
+function listAllFiles(startDir, depth) {
+  if (depth > 2) return [];
+  let result = [];
+  let entries = [];
+  try {
+    entries = fs.readdirSync(startDir, { withFileTypes: true });
+  } catch (e) {
+    return [];
+  }
+
+  for (const entry of entries) {
+    if (entry.name === 'node_modules' || entry.name === '.git') continue;
+    const fullPath = path.join(startDir, entry.name);
+    result.push(fullPath.replace(baseDir, ''));
+    if (entry.isDirectory()) {
+      result = result.concat(listAllFiles(fullPath, depth + 1));
+    }
+  }
+  return result;
 }
 
 app.get('/', function (req, res) {
-  const result = readHtmlDirect('index.html');
-  if (result.ok) {
-    return res.status(200).type('html').send(result.content);
+  const foundPath = findFileRecursive(baseDir, 'index.html', 0);
+  if (foundPath) {
+    try {
+      const html = fs.readFileSync(foundPath, 'utf8');
+      return res.status(200).type('html').send(html);
+    } catch (err) {
+      return res.status(500).send('Read error at ' + foundPath + ': ' + err.message);
+    }
   }
-  return res.status(404).send('Failed to load index.html:\n' + result.errors.join('\n'));
+
+  const allFiles = listAllFiles(baseDir, 0);
+  return res
+    .status(404)
+    .type('text')
+    .send('index.html not found anywhere under ' + baseDir + '\nFiles:\n' + allFiles.join('\n'));
 });
 
 app.get('/admin.html', function (req, res) {
-  const result = readHtmlDirect('admin.html');
-  if (result.ok) {
-    return res.status(200).type('html').send(result.content);
+  const foundPath = findFileRecursive(baseDir, 'admin.html', 0);
+  if (foundPath) {
+    try {
+      const html = fs.readFileSync(foundPath, 'utf8');
+      return res.status(200).type('html').send(html);
+    } catch (err) {
+      return res.status(500).send('Read error at ' + foundPath + ': ' + err.message);
+    }
   }
-  return res.status(404).send('Failed to load admin.html:\n' + result.errors.join('\n'));
+  return res.status(404).send('admin.html not found');
 });
 
 app.get('/api/health', function (req, res) {
-  res.json({ ok: true, publicDir: publicDir, cwd: process.cwd(), dirname: __dirname });
+  res.json({ ok: true, baseDir: baseDir, files: listAllFiles(baseDir, 0) });
 });
 
 app.get('/api/stores', function (req, res) {
