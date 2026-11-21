@@ -28,7 +28,7 @@
       box-shadow: 0 2px 8px rgba(0,0,0,0.06);
     }
     .card h2 { margin-top: 0; font-size: 18px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; }
-    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 12px; }
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 12px; }
     input, select, textarea {
       width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 14px;
     }
@@ -72,24 +72,25 @@
   </header>
 
   <div class="container">
+    <!-- إضافة متجر جديد (الشكل المبسط المباشر) -->
     <div class="card">
       <h2>إضافة متجر جديد (سوبرات، غيار سيارات، حلويات...)</h2>
       <form id="addStoreForm" enctype="multipart/form-data">
         <div class="form-grid">
           <input type="text" id="storeNameInput" name="name" placeholder="اسم المتجر (مثال: سوبرات)" required />
-          <input type="text" id="storeDescInput" name="description" placeholder="وصف قصير" />
-          <input type="number" id="storeMinOrderInput" name="min_order" placeholder="أقل طلبية (د.ج)" />
           <input type="file" id="storeImageInput" name="image" accept="image/*" />
         </div>
         <button type="submit" id="addStoreSubmitBtn" class="btn btn-primary" style="width:100%; padding:10px;">إضافة المتجر</button>
       </form>
     </div>
 
+    <!-- المتاجر الحالية -->
     <div class="card">
       <h2>المتاجر الحالية (تعديل الاسم أو الصورة أو إدارة المنتجات)</h2>
       <div id="storesList"></div>
     </div>
 
+    <!-- إضافة منتج جديد -->
     <div class="card">
       <h2>إضافة منتج جديد</h2>
       <form id="addProductForm" enctype="multipart/form-data">
@@ -105,17 +106,20 @@
       </form>
     </div>
 
+    <!-- الطلبيات الواردة من أصحاب المحلات -->
     <div class="card" id="ordersSection">
       <h2>الطلبيات الواردة من أصحاب المحلات</h2>
       <div id="ordersList"></div>
     </div>
 
+    <!-- طلبات منتجات غير متوفرة -->
     <div class="card">
       <h2>طلبات منتجات غير متوفرة (مع صور التوضيح)</h2>
       <div id="customRequestsList"></div>
     </div>
   </div>
 
+  <!-- نافذة تعديل/إضافة/مسح منتجات متجر محدد -->
   <div id="storeProductsModal" class="modal-backdrop">
     <div class="modal">
       <div class="modal-header">
@@ -186,7 +190,7 @@
             <img src="${s.image || FALLBACK_IMG}" alt="${escapeHtml(s.name)}" onerror="this.src='${FALLBACK_IMG}'" />
             <div>
               <strong>${escapeHtml(s.name)}</strong>
-              <div style="font-size:12px;color:#64748b;">${escapeHtml(s.description || '')} ${s.min_order ? '• أقل طلبية: ' + Number(s.min_order) + ' د.ج' : ''}</div>
+              <div style="font-size:12px;color:#64748b;">${escapeHtml(s.description || '')}</div>
             </div>
           </div>
           <div class="row-actions">
@@ -216,7 +220,7 @@
       });
     }
 
-    async function handleAddStoreSubmit(e) {
+    document.getElementById('addStoreForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       e.stopPropagation();
       const form = document.getElementById('addStoreForm');
@@ -246,18 +250,15 @@
       } finally {
         btn.disabled = false;
       }
-    }
-
-    document.getElementById('addStoreForm').addEventListener('submit', handleAddStoreSubmit);
+    });
 
     async function editStore(id, oldName, oldDesc) {
       const name = prompt('الاسم الجديد للمتجر:', oldName);
       if (!name || !name.trim()) return;
-      const description = prompt('الوصف الجديد:', oldDesc);
       const res = await fetch('/api/stores/' + id, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), description: description !== null ? description : oldDesc })
+        body: JSON.stringify({ name: name.trim(), description: oldDesc })
       });
       if (res.ok) {
         await loadStores();
